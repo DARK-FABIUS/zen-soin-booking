@@ -69,7 +69,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     const newUser: User = {
       id: Date.now().toString(),
-      ...userData,
+      email: userData.email,
+      firstName: userData.firstName,
+      lastName: userData.lastName,
+      phone: userData.phone,
       isAdmin: false,
       loyaltyPoints: 0
     };
@@ -77,9 +80,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // En production, ceci serait sauvé en base de données
     mockUsers.push({ ...newUser, password: userData.password });
     
-    const { password: _, ...userWithoutPassword } = newUser;
-    setUser(userWithoutPassword);
-    localStorage.setItem('user', JSON.stringify(userWithoutPassword));
+    setUser(newUser);
+    localStorage.setItem('user', JSON.stringify(newUser));
     setIsLoading(false);
     return true;
   };
