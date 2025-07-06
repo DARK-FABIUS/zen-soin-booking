@@ -3,7 +3,8 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
-import { mockAppointments, mockServices } from '@/data/mockData';
+import { useAppointments } from '@/hooks/useAppointments';
+import { useServices } from '@/hooks/useServices';
 import { Star, Calendar, Gift, Clock, Euro } from 'lucide-react';
 import PageHeader from '@/components/ui/PageHeader';
 import { Link } from 'react-router-dom';
@@ -11,6 +12,8 @@ import { Button } from '@/components/ui/button';
 
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
+  const { data: appointments = [], isLoading: appointmentsLoading } = useAppointments();
+  const { data: services = [] } = useServices();
 
   if (!user) {
     return (
@@ -27,8 +30,6 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  const userAppointments = mockAppointments.filter(apt => apt.userId === user.id);
-  
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('fr-FR', {
@@ -39,7 +40,7 @@ const Dashboard: React.FC = () => {
   };
 
   const getServiceById = (serviceId: string) => {
-    return mockServices.find(s => s.id === serviceId);
+    return services.find(s => s.id === serviceId);
   };
 
   const getStatusBadge = (status: string) => {
@@ -57,6 +58,19 @@ const Dashboard: React.FC = () => {
 
   const pointsLevel = Math.floor(user.loyaltyPoints / 100);
   const nextLevelPoints = (pointsLevel + 1) * 100 - user.loyaltyPoints;
+
+  if (appointmentsLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5 py-8">
+        <div className="max-w-6xl mx-auto px-4">
+          <PageHeader 
+            title={`Bonjour ${user.firstName} !`}
+            subtitle="Chargement de vos données..."
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5 py-8">
@@ -109,18 +123,18 @@ const Dashboard: React.FC = () => {
             <CardContent className="space-y-4">
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">Rendez-vous total</span>
-                <span className="font-bold text-2xl text-primary">{userAppointments.length}</span>
+                <span className="font-bold text-2xl text-primary">{appointments.length}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">Soins terminés</span>
                 <span className="font-bold text-xl">
-                  {userAppointments.filter(apt => apt.status === 'completed').length}
+                  {appointments.filter(apt => apt.status === 'completed').length}
                 </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">Total dépensé</span>
                 <span className="font-bold text-xl text-accent">
-                  {userAppointments.reduce((sum, apt) => sum + apt.totalPrice, 0)} €
+                  {appointments.reduce((sum, apt) => sum + apt.totalPrice, 0)} €
                 </span>
               </div>
             </CardContent>
@@ -156,15 +170,15 @@ const Dashboard: React.FC = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {userAppointments.length > 0 ? (
+            {appointments.length > 0 ? (
               <div className="space-y-4">
-                {userAppointments.map(appointment => {
+                {appointments.map(appointment => {
                   const service = getServiceById(appointment.serviceId);
                   return (
                     <div key={appointment.id} className="bg-white/50 rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
-                          <h3 className="font-medium text-lg">{service?.name}</h3>
+                          <h3 className="font-medium text-lg">{service?.name || 'Service inconnu'}</h3>
                           {getStatusBadge(appointment.status)}
                         </div>
                         <div className="flex items-center text-muted-foreground text-sm gap-4">

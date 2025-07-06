@@ -3,241 +3,259 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { mockServices, generateTimeSlots } from '@/data/mockData';
-import { Service, TimeSlot } from '@/types';
-import { Clock, Euro, Calendar, ArrowRight, Check } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useToast } from '@/hooks/use-toast';
+import { useServices } from '@/hooks/useServices';
+import { useCreateAppointment } from '@/hooks/useAppointments';
+import { Calendar, Clock, Euro, Sparkles } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
 import PageHeader from '@/components/ui/PageHeader';
+import { toast } from 'sonner';
+
+interface TimeSlot {
+  id: string;
+  time: string;
+  available: boolean;
+}
 
 const Booking: React.FC = () => {
-  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { data: services = [], isLoading: servicesLoading } = useServices();
+  const createAppointmentMutation = useCreateAppointment();
+  
+  const [selectedService, setSelectedService] = useState<any>(null);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
-  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const navigate = useNavigate();
 
-  const categories = [...new Set(mockServices.map(service => service.category))];
-
-  const handleServiceSelect = (service: Service) => {
-    setSelectedService(service);
-    setSelectedDate('');
-    setSelectedSlot(null);
-    setTimeSlots([]);
-  };
-
-  const handleDateSelect = (date: string) => {
-    setSelectedDate(date);
-    setSelectedSlot(null);
-    const slots = generateTimeSlots(date);
-    setTimeSlots(slots);
-  };
-
-  const handleSlotSelect = (slot: TimeSlot) => {
-    setSelectedSlot(slot);
-  };
-
-  const handleBooking = () => {
-    if (!user) {
-      toast({
-        title: "Connexion requise",
-        description: "Veuillez vous connecter pour réserver un soin.",
-        variant: "destructive",
+  // Generate available time slots (simplified for demo)
+  const generateTimeSlots = (): TimeSlot[] => {
+    const slots: TimeSlot[] = [];
+    const times = ['09:00', '10:00', '11:00', '14:00', '15:00', '16:00', '17:00'];
+    
+    times.forEach((time, index) => {
+      slots.push({
+        id: `slot-${index}`,
+        time,
+        available: Math.random() > 0.3 // Random availability for demo
       });
-      navigate('/login');
+    });
+    
+    return slots;
+  };
+
+  const [timeSlots] = useState<TimeSlot[]>(generateTimeSlots());
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card>
+          <CardContent className="p-8 text-center">
+            <p className="text-muted-foreground mb-4">Vous devez être connecté pour réserver un rendez-vous.</p>
+            <Link to="/login">
+              <Button>Se connecter</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const handleBooking = async () => {
+    if (!selectedService || !selectedDate || !selectedSlot) {
+      toast.error('Veuillez sélectionner un service, une date et un créneau');
       return;
     }
 
-    if (selectedService && selectedSlot) {
-      // Simulation de la réservation
-      toast({
-        title: "Réservation confirmée !",
-        description: `Votre ${selectedService.name} est confirmé pour le ${selectedSlot.date} à ${selectedSlot.time}.`,
+    try {
+      await createAppointmentMutation.mutateAsync({
+        serviceId: selectedService.id,
+        date: selectedDate,
+        time: selectedSlot.time,
+        totalPrice: selectedService.price
       });
+
+      toast.success('Rendez-vous confirmé !');
       navigate('/confirmation', {
         state: {
           service: selectedService,
-          slot: selectedSlot
+          slot: { date: selectedDate, time: selectedSlot.time }
         }
       });
+    } catch (error) {
+      console.error('Booking error:', error);
+      toast.error('Erreur lors de la réservation');
     }
   };
 
-  const getNextSevenDays = () => {
-    const dates = [];
-    for (let i = 1; i <= 7; i++) {
-      const date = new Date();
-      date.setDate(date.getDate() + i);
-      dates.push(date.toISOString().split('T')[0]);
-    }
-    return dates;
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('fr-FR', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long'
+  const getServicesByCategory = () => {
+    const categories: { [key: string]: any[] } = {};
+    services.forEach(service => {
+      if (!categories[service.category]) {
+        categories[service.category] = [];
+      }
+      categories[service.category].push(service);
     });
+    return categories;
   };
+
+  if (servicesLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5 py-8">
+        <div className="max-w-4xl mx-auto px-4">
+          <PageHeader title="Chargement..." subtitle="Récupération des prestations..." />
+        </div>
+      </div>
+    );
+  }
+
+  const servicesByCategory = getServicesByCategory();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-accent/5 py-8">
       <div className="max-w-4xl mx-auto px-4">
         <PageHeader 
-          title="Réserver un soin"
-          subtitle="Choisissez votre prestation et votre créneau idéal"
+          title="Réserver un rendez-vous"
+          subtitle="Choisissez votre prestation et votre créneau préféré"
         />
 
-        {/* Étape 1: Sélection du service */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-light mb-6 flex items-center">
-            <span className="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center text-sm mr-3">1</span>
-            Choisissez votre soin
-          </h2>
-          
-          {categories.map(category => (
-            <div key={category} className="mb-6">
-              <h3 className="text-lg font-medium text-muted-foreground mb-3">{category}</h3>
-              <div className="grid md:grid-cols-2 gap-4">
-                {mockServices
-                  .filter(service => service.category === category)
-                  .map(service => (
-                    <Card 
-                      key={service.id}
-                      className={`cursor-pointer transition-all duration-300 hover:shadow-lg ${
-                        selectedService?.id === service.id 
-                          ? 'ring-2 ring-primary border-primary bg-primary/5' 
-                          : 'border-border hover:border-primary/50'
-                      }`}
-                      onClick={() => handleServiceSelect(service)}
-                    >
-                      <CardContent className="p-6">
-                        <div className="flex justify-between items-start mb-3">
-                          <h4 className="font-medium text-lg">{service.name}</h4>
-                          {selectedService?.id === service.id && (
-                            <Check className="w-5 h-5 text-primary" />
-                          )}
-                        </div>
-                        <p className="text-muted-foreground text-sm mb-4">{service.description}</p>
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center text-sm text-muted-foreground">
-                            <Clock className="w-4 h-4 mr-1" />
-                            {service.duration} min
+        <div className="grid lg:grid-cols-2 gap-8">
+          {/* Selection des services */}
+          <div className="space-y-6">
+            <Card className="border-0 gradient-card shadow-xl">
+              <CardHeader>
+                <CardTitle className="flex items-center text-xl font-light">
+                  <Sparkles className="w-5 h-5 mr-2" />
+                  Nos prestations
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {Object.entries(servicesByCategory).map(([category, categoryServices]) => (
+                  <div key={category}>
+                    <h3 className="font-medium text-lg mb-3 text-primary">{category}</h3>
+                    <div className="space-y-2">
+                      {categoryServices.map(service => (
+                        <div
+                          key={service.id}
+                          className={`p-4 rounded-2xl cursor-pointer transition-all duration-200 ${
+                            selectedService?.id === service.id
+                              ? 'bg-primary/20 border-2 border-primary'
+                              : 'bg-white/50 hover:bg-white/70 border-2 border-transparent'
+                          }`}
+                          onClick={() => setSelectedService(service)}
+                        >
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <h4 className="font-medium">{service.name}</h4>
+                              <p className="text-sm text-muted-foreground mt-1">{service.description}</p>
+                              <div className="flex items-center gap-4 mt-2">
+                                <Badge variant="outline" className="text-xs">
+                                  <Clock className="w-3 h-3 mr-1" />
+                                  {service.duration} min
+                                </Badge>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="font-bold text-lg text-primary">{service.price} €</div>
+                            </div>
                           </div>
-                          <div className="flex items-center font-medium text-primary">
-                            <Euro className="w-4 h-4 mr-1" />
-                            {service.price}
-                          </div>
                         </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-              </div>
-            </div>
-          ))}
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Selection date et créneau */}
+          <div className="space-y-6">
+            {selectedService && (
+              <>
+                <Card className="border-0 gradient-card shadow-xl">
+                  <CardHeader>
+                    <CardTitle className="flex items-center text-xl font-light">
+                      <Calendar className="w-5 h-5 mr-2" />
+                      Choisir la date
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      min={new Date().toISOString().split('T')[0]}
+                      className="w-full p-3 rounded-xl border border-gray-200 focus:border-primary focus:outline-none"
+                    />
+                  </CardContent>
+                </Card>
+
+                {selectedDate && (
+                  <Card className="border-0 gradient-card shadow-xl">
+                    <CardHeader>
+                      <CardTitle className="flex items-center text-xl font-light">
+                        <Clock className="w-5 h-5 mr-2" />
+                        Créneaux disponibles
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 gap-3">
+                        {timeSlots.map(slot => (
+                          <Button
+                            key={slot.id}
+                            variant={selectedSlot?.id === slot.id ? "default" : "outline"}
+                            disabled={!slot.available}
+                            onClick={() => setSelectedSlot(slot)}
+                            className="p-4 h-auto rounded-xl"
+                          >
+                            {slot.time}
+                          </Button>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {selectedService && selectedDate && selectedSlot && (
+                  <Card className="border-0 gradient-card shadow-xl">
+                    <CardHeader>
+                      <CardTitle className="flex items-center text-xl font-light">
+                        <Euro className="w-5 h-5 mr-2" />
+                        Récapitulatif
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="bg-white/50 rounded-2xl p-4 space-y-2">
+                        <div className="flex justify-between">
+                          <span>Prestation</span>
+                          <span className="font-medium">{selectedService.name}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Date</span>
+                          <span className="font-medium">{new Date(selectedDate).toLocaleDateString('fr-FR')}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Heure</span>
+                          <span className="font-medium">{selectedSlot.time}</span>
+                        </div>
+                        <div className="flex justify-between border-t pt-2">
+                          <span className="font-medium">Total</span>
+                          <span className="font-bold text-primary text-lg">{selectedService.price} €</span>
+                        </div>
+                      </div>
+                      <Button 
+                        onClick={handleBooking}
+                        disabled={createAppointmentMutation.isPending}
+                        className="w-full py-6 rounded-full bg-primary hover:bg-primary/90"
+                      >
+                        {createAppointmentMutation.isPending ? 'Confirmation...' : 'Confirmer la réservation'}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            )}
+          </div>
         </div>
-
-        {/* Étape 2: Sélection de la date */}
-        {selectedService && (
-          <div className="mb-8">
-            <h2 className="text-2xl font-light mb-6 flex items-center">
-              <span className="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center text-sm mr-3">2</span>
-              Choisissez une date
-            </h2>
-            
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-              {getNextSevenDays().map(date => (
-                <Button
-                  key={date}
-                  variant={selectedDate === date ? 'default' : 'outline'}
-                  className="h-auto p-4 flex flex-col rounded-2xl"
-                  onClick={() => handleDateSelect(date)}
-                >
-                  <span className="text-xs opacity-70 mb-1">
-                    {formatDate(date).split(' ')[0]}
-                  </span>
-                  <span className="font-medium">
-                    {formatDate(date).split(' ')[1]}
-                  </span>
-                  <span className="text-xs opacity-70">
-                    {formatDate(date).split(' ')[2]}
-                  </span>
-                </Button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Étape 3: Sélection du créneau */}
-        {selectedDate && timeSlots.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-2xl font-light mb-6 flex items-center">
-              <span className="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center text-sm mr-3">3</span>
-              Choisissez un horaire
-            </h2>
-            
-            <div className="grid grid-cols-3 md:grid-cols-6 lg:grid-cols-8 gap-3">
-              {timeSlots.map(slot => (
-                <Button
-                  key={slot.id}
-                  variant={selectedSlot?.id === slot.id ? 'default' : 'outline'}
-                  className="rounded-full"
-                  disabled={!slot.available}
-                  onClick={() => handleSlotSelect(slot)}
-                >
-                  {slot.time}
-                </Button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Récapitulatif et confirmation */}
-        {selectedService && selectedSlot && (
-          <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-accent/5">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Calendar className="w-5 h-5 mr-2" />
-                Récapitulatif de votre réservation
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Prestation :</span>
-                <span className="font-medium">{selectedService.name}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Date :</span>
-                <span className="font-medium">{formatDate(selectedSlot.date)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Heure :</span>
-                <span className="font-medium">{selectedSlot.time}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Durée :</span>
-                <span className="font-medium">{selectedService.duration} minutes</span>
-              </div>
-              <div className="flex justify-between items-center text-lg">
-                <span className="font-medium">Total :</span>
-                <span className="font-bold text-primary">{selectedService.price} €</span>
-              </div>
-              
-              <Button 
-                onClick={handleBooking}
-                className="w-full rounded-full py-6 text-lg bg-primary hover:bg-primary/90 transition-all duration-300"
-              >
-                Confirmer ma réservation
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </Button>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </div>
   );
