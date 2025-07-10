@@ -1,15 +1,25 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
 import { ArrowLeft, Clock, Calendar as CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 const Calendrier: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const location = useLocation();
+  
+  // Récupérer la prestation sélectionnée depuis le state ou utiliser une valeur par défaut
+  const selectedService = location.state?.selectedService || 'Massage relaxant';
 
   // Créneaux horaires fictifs
   const timeSlots = [
@@ -26,9 +36,75 @@ const Calendrier: React.FC = () => {
     setSelectedTimeSlot(timeSlot);
   };
 
-  const handleConfirmAppointment = () => {
-    alert("Votre rendez-vous a bien été simulé !");
-    setSelectedTimeSlot(null);
+  const handleConfirmAppointment = async () => {
+    if (!user) {
+      toast({
+        title: "Connexion requise",
+        description: "Vous devez vous connecter pour prendre un rendez-vous.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!selectedDate || !selectedTimeSlot) {
+      toast({
+        title: "Erreur",
+        description: "Veuillez sélectionner une date et un créneau horaire.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      // Récupérer l'ID du service depuis la base de données
+      const { data: services, error: serviceError } = await supabase
+        .from('services')
+        .select('id, price')
+        .eq('name', selectedService)
+        .eq('active', true)
+        .single();
+
+      if (serviceError || !services) {
+        throw new Error('Service non trouvé');
+      }
+
+      // Insérer le rendez-vous dans la table appointments
+      const { error: insertError } = await supabase
+        .from('appointments')
+        .insert({
+          user_id: user.id,
+          service_id: services.id,
+          appointment_date: format(selectedDate, 'yyyy-MM-dd'),
+          appointment_time: selectedTimeSlot,
+          status: 'confirmed',
+          total_price: services.price
+        });
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      toast({
+        title: "Rendez-vous enregistré avec succès",
+        description: `Votre rendez-vous pour ${selectedService} le ${format(selectedDate, 'd MMMM yyyy', { locale: fr })} à ${selectedTimeSlot} a été confirmé.`,
+      });
+
+      // Réinitialiser la sélection
+      setSelectedTimeSlot(null);
+      setSelectedDate(new Date());
+
+    } catch (error) {
+      console.error('Erreur lors de l\'enregistrement du rendez-vous:', error);
+      toast({
+        title: "Erreur",
+        description: "Une erreur est survenue lors de l'enregistrement de votre rendez-vous.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -122,9 +198,10 @@ const Calendrier: React.FC = () => {
             <Button 
               size="lg" 
               onClick={handleConfirmAppointment}
+              disabled={isLoading}
               className="w-full md:w-auto px-8 py-4 text-lg rounded-full bg-primary hover:bg-primary/90"
             >
-              Confirmer le rendez-vous
+              {isLoading ? "Enregistrement..." : "Confirmer le rendez-vous"}
             </Button>
           </CardContent>
         </Card>
