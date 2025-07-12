@@ -14,6 +14,7 @@ import Calendrier from "./pages/Calendrier";
 import Booking from "./pages/Booking";
 import Confirmation from "./pages/Confirmation";
 import Dashboard from "./pages/Dashboard";
+import RendezVous from "./pages/RendezVous";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
@@ -37,6 +38,7 @@ const App = () => (
               <Route path="/booking" element={<Booking />} />
               <Route path="/confirmation" element={<Confirmation />} />
               <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/rendez-vous" element={<RendezVous />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
