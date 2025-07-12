@@ -65,14 +65,12 @@ export const useCreateAppointment = () => {
 
       console.log('Creating appointment:', appointmentData);
       const { data, error } = await supabase
-        .from('appointments')
+        .from('rendezvous')
         .insert({
           user_id: user.id,
-          service_id: appointmentData.serviceId,
-          appointment_date: appointmentData.date,
-          appointment_time: appointmentData.time,
-          total_price: appointmentData.totalPrice,
-          status: 'confirmed'
+          prestation: appointmentData.serviceId,
+          date: appointmentData.date,
+          heure: appointmentData.time
         })
         .select()
         .single();
