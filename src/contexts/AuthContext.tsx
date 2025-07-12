@@ -57,9 +57,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
 
     // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       console.log('Initial session check:', session?.user?.email);
-      // The onAuthStateChange will handle the session
+      setSession(session);
+      
+      if (session?.user) {
+        // Fetch user profile from our profiles table
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profile && !error) {
+          setUser({
+            id: profile.id,
+            email: session.user.email!,
+            firstName: profile.first_name,
+            lastName: profile.last_name,
+            phone: profile.phone || '',
+            isAdmin: profile.is_admin || false,
+            loyaltyPoints: profile.loyalty_points || 0
+          });
+        } else {
+          console.error('Error fetching profile on session restore:', error);
+        }
+      } else {
+        setUser(null);
+      }
+      setIsLoading(false);
     });
 
     return () => subscription.unsubscribe();
